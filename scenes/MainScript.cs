@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 // a port of this to C#:  https://github.com/russs123/tetris_tut/blob/main/TileMap.gd
@@ -103,6 +104,7 @@ public partial class MainScript : TileMap
 	private void CreatePiece()
 	{
 		// reset the variables.
+		steps = [0, 0, 0];
 		currentPosition = START_POSITION;
 		activePiece = pieceType[rotationIndex];
 		DrawPiece(activePiece, currentPosition, pieceAtlas);
@@ -131,17 +133,20 @@ public partial class MainScript : TileMap
 		{
 			if (steps[i] > speed)
 			{
-				movePiece(directions[i]);
+				TryMovePiece(directions[i]);
 				steps[i] = 0;
 			}
 		}
 	}
 
-	private void movePiece(Vector2I direction)
+	private void TryMovePiece(Vector2I direction)
 	{
-		EraseActivePiece();
-		currentPosition += direction;
-		DrawPiece(activePiece, currentPosition, pieceAtlas);
+		if (CanMove(direction))
+		{
+			EraseActivePiece();
+			currentPosition += direction;
+			DrawPiece(activePiece, currentPosition, pieceAtlas);
+		}
 	}
 
 	/// <summary>
@@ -164,5 +169,25 @@ public partial class MainScript : TileMap
 		{
 			EraseCell(ACTIVE_LAYER, currentPosition + part);
 		}
+	}
+	
+	/// <summary>
+	/// Returns true if the active piece is free to move in this direction.
+	/// </summary>
+	public bool CanMove(Vector2I direction)
+	{
+		for (int i = 0; i < activePiece.Length; i++)
+		{
+			if (!IsPositionFree(activePiece[i] + direction + currentPosition))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	public bool IsPositionFree(Vector2I position) {
+		// NOTE: -1 is the empty tile.
+		return GetCellSourceId(BOARD_LAYER, position) == -1;
 	}
 }
