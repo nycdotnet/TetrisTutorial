@@ -15,7 +15,7 @@ bg_color = Color(0.141176, 0.352941, 0.439216, 1)
 bg_color = Color(0.141176, 0.352941, 0.439216, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_ncew5"]
-bg_color = Color(0.141176, 0.352941, 0.439216, 1)
+bg_color = Color(0.905882, 0.352941, 0.439216, 1)
 
 [node name="HUD" type="CanvasLayer"]
 

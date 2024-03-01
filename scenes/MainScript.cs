@@ -49,7 +49,14 @@ public partial class MainScript : TileMap
 
 	public static readonly Vector2I[] directions = [Vector2I.Left, Vector2I.Right, Vector2I.Down];
 	public const double INITIAL_SPEED = 1.0;
-	public double Speed;
+	/// <summary>
+	/// The speed is divided by this number on every completed row.
+	/// </summary>
+	public const double ACCELERATION = 1.1;
+	/// <summary>
+	/// The number of frames between movements - the lower the Interval, the faster the speed.
+	/// </summary>
+	public double Interval;
 	public double[] steps = [0, 0, 0];  // LEFT, RIGHT, DOWN
 
 	private Vector2I[][] PieceType;
@@ -72,20 +79,40 @@ public partial class MainScript : TileMap
 	public const int BOARD_LAYER = 0;
 	public const int ACTIVE_LAYER = 1;
 
+	public int Score = 0;
+	private bool GameRunning = false;
+	public const int REWARD = 100;
+
 	// Called when the node enters the scene tree for the first time.
 	public override void _Ready()
+	{
+		NewGame();
+		StartButton.Pressed += StartButton_Pressed; 
+	}
+
+	private void StartButton_Pressed()
 	{
 		NewGame();
 	}
 
 	public Node Hud => FindChild("HUD", recursive: false);
+	public Label GameOverLabel => Hud.GetNode("GameOverLabel") as Label;
+	public Label ScoreLabel => Hud.GetNode("ScoreLabel") as Label;
+	public Button StartButton => Hud.GetNode("StartButton") as Button;
 
 	private void NewGame()
 	{
-		(Hud.GetNode("GameOverLabel") as Label).Hide();
-		
+		GameRunning = true;
+		GameOverLabel.Hide();
+		ClearBoard();
+		ClearNextPanel();
+		EraseActivePiece();
+
 		// reset variables
-		Speed = INITIAL_SPEED;
+		Interval = INITIAL_SPEED;
+
+		Score = 0;
+		RenderScore();
 
 		PieceType = PickPiece();
 		// find the corresponding color in the piece atlas - since it's flat, the y is always 0.
@@ -122,6 +149,11 @@ public partial class MainScript : TileMap
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
 	public override void _Process(double delta)
 	{
+		if (!GameRunning)
+		{
+			return;
+		}
+
 		if (Input.IsActionPressed("ui_down"))
 		{
 			steps[2] += delta * 20;
@@ -143,9 +175,10 @@ public partial class MainScript : TileMap
 
 		steps[2] += delta;
 		
+		// as things get faster, this causes the left and right movement to get faster.  This is a bug.
 		for (var i = 0; i < directions.Length; i++)
 		{
-			if (steps[i] > Speed)
+			if (steps[i] > Interval)
 			{
 				TryMovePiece(directions[i]);
 				steps[i] = 0;
@@ -184,6 +217,7 @@ public partial class MainScript : TileMap
 				NextPieceAtlas = new Vector2I(Array.IndexOf(AllShapes, NextPieceType), 0);
 				ClearNextPanel();
 				CreatePiece();
+				CheckGameOver();
 			}
 		}
 	}
@@ -196,6 +230,17 @@ public partial class MainScript : TileMap
 			for (var y = 5; y < 10; y++)
 			{
 				EraseCell(ACTIVE_LAYER, new Vector2I(x, y));
+			}
+		}
+	}
+
+	private void ClearBoard()
+	{
+		for (var x = 0; x < COLS + 1; x++)
+		{
+			for (var y = 1; y < ROWS; y++)
+			{
+				EraseCell(BOARD_LAYER, new Vector2I(x + 1, y));
 			}
 		}
 	}
@@ -228,6 +273,10 @@ public partial class MainScript : TileMap
 
 	public void EraseActivePiece()
 	{
+		if (activePiece is null)
+		{
+			return;
+		}
 		foreach (var part in activePiece)
 		{
 			EraseCell(ACTIVE_LAYER, currentPosition + part);
@@ -288,14 +337,25 @@ public partial class MainScript : TileMap
 			}
 			if (count == COLS)
 			{
-				Debug.WriteLine($"Completed line at row {row}!");
 				ShiftRows(row);
+				Score += REWARD;
+				Interval /= ACCELERATION;
+				Debug.WriteLine($"Speed is now {Interval}.");
+				RenderScore();
 			}
 			else
 			{
 				row -= 1;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Refreshes the score text.
+	/// </summary>
+	private void RenderScore()
+	{
+		ScoreLabel.Text = $"Score: {Score}";
 	}
 
 	public void ShiftRows(int row)
@@ -314,6 +374,19 @@ public partial class MainScript : TileMap
 				{
 					SetCell(BOARD_LAYER, new Vector2I(x + 1, y), tileId, atlas);
 				}
+			}
+		}
+	}
+
+	public void CheckGameOver()
+	{
+		for (var i = 0; i < activePiece.Length; i++)
+		{
+			if (!IsPositionFree(activePiece[i] + currentPosition))
+			{
+				LandPiece();
+				GameOverLabel.Show();
+				GameRunning = false;
 			}
 		}
 	}
