@@ -1,6 +1,7 @@
 using Godot;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 
 // a port of this to C#:  https://github.com/russs123/tetris_tut/blob/main/TileMap.gd
@@ -47,12 +48,12 @@ public partial class MainScript : TileMap
 	public Vector2I currentPosition;
 
 	public static readonly Vector2I[] directions = [Vector2I.Left, Vector2I.Right, Vector2I.Down];
-	public const double InitialSpeed = 1.0;
-	public double speed;
+	public const double INITIAL_SPEED = 1.0;
+	public double Speed;
 	public double[] steps = [0, 0, 0];  // LEFT, RIGHT, DOWN
 
-	private Vector2I[][] pieceType;
-	private Vector2I[][] nextPieceType;
+	private Vector2I[][] PieceType;
+	private Vector2I[][] NextPieceType;
 	/// <summary>
 	/// The current rotation index: 0 => 0, 90 => 1, 180 => 2, 270 => 3
 	/// </summary>
@@ -65,7 +66,7 @@ public partial class MainScript : TileMap
 	/// Indexes into the Tetronimoes atlas - it's a Vector2I because the atlas is 2d (even though it's all on one row)
 	/// This is basically the way to get the color of the blocks in the shape.
 	/// </summary>
-	public Vector2I pieceAtlas;
+	public Vector2I PieceAtlas;
 	public Vector2I NextPieceAtlas;
 
 	public const int BOARD_LAYER = 0;
@@ -77,14 +78,22 @@ public partial class MainScript : TileMap
 		NewGame();
 	}
 
+	public Node Hud => FindChild("HUD", recursive: false);
+
 	private void NewGame()
 	{
+		(Hud.GetNode("GameOverLabel") as Label).Hide();
+		
 		// reset variables
-		speed = InitialSpeed;
+		Speed = INITIAL_SPEED;
 
-		pieceType = PickPiece();
+		PieceType = PickPiece();
 		// find the corresponding color in the piece atlas - since it's flat, the y is always 0.
-		pieceAtlas = new Vector2I(Array.IndexOf(AllShapes, pieceType), 0);
+		PieceAtlas = new Vector2I(Array.IndexOf(AllShapes, PieceType), 0);
+
+		NextPieceType = PickPiece();
+		NextPieceAtlas = new Vector2I(Array.IndexOf(AllShapes, NextPieceType), 0);
+
 		CreatePiece();
 	}
 
@@ -105,8 +114,9 @@ public partial class MainScript : TileMap
 		// reset the variables.
 		steps = [0, 0, 0];
 		currentPosition = START_POSITION;
-		activePiece = pieceType[rotationIndex];
-		DrawPiece(activePiece, currentPosition, pieceAtlas);
+		activePiece = PieceType[rotationIndex];
+		DrawPiece(activePiece, currentPosition, PieceAtlas);
+		DrawPiece(NextPieceType[0], new Vector2I(15, 6), NextPieceAtlas);
 	}
 
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
@@ -135,7 +145,7 @@ public partial class MainScript : TileMap
 		
 		for (var i = 0; i < directions.Length; i++)
 		{
-			if (steps[i] > speed)
+			if (steps[i] > Speed)
 			{
 				TryMovePiece(directions[i]);
 				steps[i] = 0;
@@ -149,8 +159,8 @@ public partial class MainScript : TileMap
 		{
 			EraseActivePiece();
 			rotationIndex = (rotationIndex + 1) % 4; // caps us with 0-3
-			activePiece = pieceType[rotationIndex];
-			DrawPiece(activePiece, currentPosition, pieceAtlas);
+			activePiece = PieceType[rotationIndex];
+			DrawPiece(activePiece, currentPosition, PieceAtlas);
 		}
 	}
 
@@ -160,7 +170,44 @@ public partial class MainScript : TileMap
 		{
 			EraseActivePiece();
 			currentPosition += direction;
-			DrawPiece(activePiece, currentPosition, pieceAtlas);
+			DrawPiece(activePiece, currentPosition, PieceAtlas);
+		}
+		else
+		{
+			if (direction == Vector2I.Down)
+			{
+				LandPiece();
+				PieceType = NextPieceType;
+				PieceAtlas = NextPieceAtlas;
+				NextPieceType = PickPiece();
+				NextPieceAtlas = new Vector2I(Array.IndexOf(AllShapes, NextPieceType), 0);
+				ClearNextPanel();
+				CreatePiece();
+			}
+		}
+	}
+
+	private void ClearNextPanel()
+	{
+		// this is a brute force way to clear the next panel
+		for (var x = 14; x < 20; x++)
+		{
+			for (var y = 5; y < 10; y++)
+			{
+				EraseCell(ACTIVE_LAYER, new Vector2I(x, y));
+			}
+		}
+	}
+
+	/// <summary>
+	/// Remove each segment from the active layer and move to the board layer.
+	/// </summary>
+	private void LandPiece()
+	{
+		for (var i = 0; i < activePiece.Length; i++)
+		{
+			EraseCell(ACTIVE_LAYER, currentPosition + activePiece[i]);
+			SetCell(BOARD_LAYER, currentPosition + activePiece[i], tileId, PieceAtlas);
 		}
 	}
 
@@ -204,7 +251,7 @@ public partial class MainScript : TileMap
 	private bool CanRotate()
 	{
 		var nextRotationIndex = (rotationIndex + 1) % 4;
-		var rotatedPiece = pieceType[nextRotationIndex];
+		var rotatedPiece = PieceType[nextRotationIndex];
 
 		for (var i = 0; i < rotatedPiece.Length; i++)
 		{
