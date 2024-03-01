@@ -1,7 +1,6 @@
 using Godot;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 // a port of this to C#:  https://github.com/russs123/tetris_tut/blob/main/TileMap.gd
@@ -118,6 +117,11 @@ public partial class MainScript : TileMap
 			steps[2] += delta * 20;
 		}
 
+		if (Input.IsActionJustPressed("ui_up"))
+		{
+			TryRotatePiece();
+		}
+
 		if (Input.IsActionPressed("ui_left"))
 		{
 			steps[0] += delta * 14;
@@ -136,6 +140,17 @@ public partial class MainScript : TileMap
 				TryMovePiece(directions[i]);
 				steps[i] = 0;
 			}
+		}
+	}
+
+	private void TryRotatePiece()
+	{
+		if (CanRotate())
+		{
+			EraseActivePiece();
+			rotationIndex = (rotationIndex + 1) % 4; // caps us with 0-3
+			activePiece = pieceType[rotationIndex];
+			DrawPiece(activePiece, currentPosition, pieceAtlas);
 		}
 	}
 
@@ -179,6 +194,21 @@ public partial class MainScript : TileMap
 		for (int i = 0; i < activePiece.Length; i++)
 		{
 			if (!IsPositionFree(activePiece[i] + direction + currentPosition))
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private bool CanRotate()
+	{
+		var nextRotationIndex = (rotationIndex + 1) % 4;
+		var rotatedPiece = pieceType[nextRotationIndex];
+
+		for (var i = 0; i < rotatedPiece.Length; i++)
+		{
+			if (!IsPositionFree(currentPosition + rotatedPiece[i]))
 			{
 				return false;
 			}
