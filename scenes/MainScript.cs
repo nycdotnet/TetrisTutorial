@@ -2,7 +2,6 @@ using Godot;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 
 // a port of this to C#:  https://github.com/russs123/tetris_tut/blob/main/TileMap.gd
 
@@ -24,7 +23,7 @@ public partial class MainScript : TileMap
 
 	public static readonly Vector2I[][][] AllShapes = [i, t];
 
-	public static Stack<Vector2I[][]> shapes;
+	private Stack<Vector2I[][]> next_shapes;
 
 	public static Stack<Vector2I[][]> GetShuffledShapes()
 	{
@@ -39,24 +38,35 @@ public partial class MainScript : TileMap
 		return result;
 	}
 
-	//var shapes := [i, t, o, z, s, l, j]
-	//var shapes_full := shapes.duplicate()
+	// Grid Variables
+	public const int COLS = 10;
+	public const int ROWS = 20;
 
-	// Grid Variables:
-	const int COLS = 10;
-	const int ROWS = 20;
+	// Movement Variables.
+	public static readonly Vector2I START_POSITION = new(5, 1);
+	public Vector2I currentPosition;
 
-	public Vector2I[][] PieceType { get; set; }
-	public Vector2I[][] NextPieceType { get; set; }
-	public int RotationIndex { get; set; } = 0;
-	public Vector2I[] ActivePiece { get; set; }
+	public static readonly Vector2I[] directions = [Vector2I.Left, Vector2I.Right, Vector2I.Down];
+	public const double InitialSpeed = 1.0;
+	public double speed;
+	public double[] steps = [0, 0, 0];  // LEFT, RIGHT, DOWN
 
-	public int TileId { get; set; } = 0;
+	private Vector2I[][] pieceType;
+	private Vector2I[][] nextPieceType;
+	/// <summary>
+	/// The current rotation index: 0 => 0, 90 => 1, 180 => 2, 270 => 3
+	/// </summary>
+	private int rotationIndex = 0;
+	private Vector2I[] activePiece;
+
+	private int tileId = 0;
+
 	/// <summary>
 	/// Indexes into the Tetronimoes atlas - it's a Vector2I because the atlas is 2d (even though it's all on one row)
+	/// This is basically the way to get the color of the blocks in the shape.
 	/// </summary>
-	public Vector2I PieceAtlas { get; set; }
-	public Vector2I NextPieceAtlas { get; set; }
+	public Vector2I pieceAtlas;
+	public Vector2I NextPieceAtlas;
 
 	public const int BOARD_LAYER = 0;
 	public const int ACTIVE_LAYER = 1;
@@ -69,22 +79,69 @@ public partial class MainScript : TileMap
 
 	private void NewGame()
 	{
-		PieceType = PickPiece();
+		// reset variables
+		speed = InitialSpeed;
+
+		pieceType = PickPiece();
+		// find the corresponding color in the piece atlas - since it's flat, the y is always 0.
+		pieceAtlas = new Vector2I(Array.IndexOf(AllShapes, pieceType), 0);
+		CreatePiece();
 	}
 
 	private Vector2I[][] PickPiece()
 	{
-		if (shapes is not { Count: > 0 } )
+		if (next_shapes is not { Count: > 0 } )
 		{
-			shapes = GetShuffledShapes();
+			next_shapes = GetShuffledShapes();
 		}
-		return shapes.Pop();
+		return next_shapes.Pop();
+	}
+
+	/// <summary>
+	/// creates a piece at the start position and draws it.
+	/// </summary>
+	private void CreatePiece()
+	{
+		// reset the variables.
+		currentPosition = START_POSITION;
+		activePiece = pieceType[rotationIndex];
+		DrawPiece(activePiece, currentPosition, pieceAtlas);
 	}
 
 	// Called every frame. 'delta' is the elapsed time since the previous frame.
 	public override void _Process(double delta)
 	{
-		DrawPiece(PieceType[0], new Vector2I(5, 1), new Vector2I(1, 0));
+		if (Input.IsActionPressed("ui_down"))
+		{
+			steps[2] += delta * 20;
+		}
+
+		if (Input.IsActionPressed("ui_left"))
+		{
+			steps[0] += delta * 14;
+		}
+		else if (Input.IsActionPressed("ui_right"))
+		{
+			steps[1] += delta * 14;
+		}
+
+		steps[2] += delta;
+		
+		for (var i = 0; i < directions.Length; i++)
+		{
+			if (steps[i] > speed)
+			{
+				movePiece(directions[i]);
+				steps[i] = 0;
+			}
+		}
+	}
+
+	private void movePiece(Vector2I direction)
+	{
+		EraseActivePiece();
+		currentPosition += direction;
+		DrawPiece(activePiece, currentPosition, pieceAtlas);
 	}
 
 	/// <summary>
@@ -97,7 +154,15 @@ public partial class MainScript : TileMap
 	{
 		foreach (var part in piece)
 		{
-			SetCell(ACTIVE_LAYER, position + part, TileId, atlas);
+			SetCell(ACTIVE_LAYER, position + part, tileId, atlas);
+		}
+	}
+
+	public void EraseActivePiece()
+	{
+		foreach (var part in activePiece)
+		{
+			EraseCell(ACTIVE_LAYER, currentPosition + part);
 		}
 	}
 }
