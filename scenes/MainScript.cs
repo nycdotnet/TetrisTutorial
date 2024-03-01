@@ -177,6 +177,7 @@ public partial class MainScript : TileMap
 			if (direction == Vector2I.Down)
 			{
 				LandPiece();
+				CheckRows();
 				PieceType = NextPieceType;
 				PieceAtlas = NextPieceAtlas;
 				NextPieceType = PickPiece();
@@ -266,5 +267,54 @@ public partial class MainScript : TileMap
 	public bool IsPositionFree(Vector2I position) {
 		// NOTE: -1 is the empty tile.
 		return GetCellSourceId(BOARD_LAYER, position) == -1;
+	}
+
+	public void CheckRows()
+	{
+		var row = ROWS - 1;
+		while (row > 0)
+		{
+			var count = 0;
+			for (var x = 0; x < COLS; x++)
+			{
+				if (IsPositionFree(new(x + 1, row)))
+				{
+					break;
+				}
+				else
+				{
+					count++;
+				}
+			}
+			if (count == COLS)
+			{
+				Debug.WriteLine($"Completed line at row {row}!");
+				ShiftRows(row);
+			}
+			else
+			{
+				row -= 1;
+			}
+		}
+	}
+
+	public void ShiftRows(int row)
+	{
+		for (var y = row; y > 1; y--)
+		{
+			for (var x = 0; x < COLS; x++)
+			{
+				var atlas = GetCellAtlasCoords(BOARD_LAYER, new Vector2I(x + 1, y - 1));
+
+				if (atlas == new Vector2I(-1, -1))
+				{
+					EraseCell(BOARD_LAYER, new Vector2I(x + 1, y));
+				}
+				else
+				{
+					SetCell(BOARD_LAYER, new Vector2I(x + 1, y), tileId, atlas);
+				}
+			}
+		}
 	}
 }
