@@ -1,7 +1,6 @@
 using Godot;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 
 // a port of this to C#:  https://github.com/russs123/tetris_tut/blob/main/TileMap.gd
@@ -80,8 +79,16 @@ public partial class MainScript : TileMap
     public static readonly Vector2I START_POSITION = new(5, 1);
     public Vector2I currentPosition;
 
-    public static readonly Vector2I[] directions = [Vector2I.Left, Vector2I.Right, Vector2I.Down];
-    public const double INITIAL_SPEED = 1.0;
+    public const double INITIAL_DOWN_SPEED = 1.0;
+    
+    /// <summary>
+    /// If the player holds left or right, this is the time measured in seconds it should take
+    /// for the piece to move one grid square left or right after the first move (which should
+    /// be registered on the next frame).
+    /// </summary>
+    public const double HORIZONTAL_INTERVAL = 0.08;
+    public double horizontalSteps = 0;
+
     /// <summary>
     /// The speed is divided by this number on every completed row.
     /// </summary>
@@ -90,7 +97,11 @@ public partial class MainScript : TileMap
     /// The number of frames between movements - the lower the Interval, the faster the speed.
     /// </summary>
     public double Interval;
-    public double[] steps = [0, 0, 0];  // LEFT, RIGHT, DOWN
+
+    /// <summary>
+    /// This is a way to implement subpixels for moving the active piece down.
+    /// </summary>
+    public double downSteps = 0;
 
     private Vector2I[][] PieceType;
     private Vector2I[][] NextPieceType;
@@ -142,9 +153,10 @@ public partial class MainScript : TileMap
         EraseActivePiece();
 
         // reset variables
-        Interval = INITIAL_SPEED;
+        Interval = INITIAL_DOWN_SPEED;
 
         Score = 0;
+        downSteps = 0;
         RenderScore();
 
         PieceType = PickPiece();
@@ -172,7 +184,8 @@ public partial class MainScript : TileMap
     private void CreatePiece()
     {
         // reset the variables.
-        steps = [0, 0, 0];
+        downSteps = 0;
+        horizontalSteps = 0;
         currentPosition = START_POSITION;
         activePiece = PieceType[rotationIndex];
         DrawPiece(activePiece, currentPosition, PieceAtlas);
@@ -187,35 +200,56 @@ public partial class MainScript : TileMap
             return;
         }
 
-        if (Input.IsActionPressed("ui_down"))
-        {
-            steps[2] += delta * 20;
-        }
-
         if (Input.IsActionJustPressed("ui_up"))
         {
             TryRotatePiece();
         }
 
-        if (Input.IsActionPressed("ui_left"))
+        if (Input.IsActionJustPressed("ui_left"))
         {
-            steps[0] += delta * 14;
+            TryMovePiece(Vector2I.Left);
+            horizontalSteps = 0;
+        }
+        else if (Input.IsActionPressed("ui_left"))
+        {
+            
+            horizontalSteps -= delta;
+            if (horizontalSteps < -HORIZONTAL_INTERVAL)
+            {
+                TryMovePiece(Vector2I.Left);
+                horizontalSteps = 0;
+            }
+        }
+        else if (Input.IsActionJustPressed("ui_right"))
+        {
+            TryMovePiece(Vector2I.Right);
+            horizontalSteps = 0;
         }
         else if (Input.IsActionPressed("ui_right"))
         {
-            steps[1] += delta * 14;
+            horizontalSteps += delta;
+            if (horizontalSteps > HORIZONTAL_INTERVAL)
+            {
+                TryMovePiece(Vector2I.Right);
+                horizontalSteps = 0;
+            }
+        }
+        else
+        {
+            horizontalSteps = 0;
         }
 
-        steps[2] += delta;
-
-        // as things get faster, this causes the left and right movement to get faster.  This is a bug.
-        for (var i = 0; i < directions.Length; i++)
+        if (Input.IsActionPressed("ui_down"))
         {
-            if (steps[i] > Interval)
-            {
-                TryMovePiece(directions[i]);
-                steps[i] = 0;
-            }
+            downSteps += delta * 20;
+        }
+
+        downSteps += delta;
+
+        if (downSteps > Interval)
+        {
+            TryMovePiece(Vector2I.Down);
+            downSteps = 0;
         }
     }
 
@@ -374,7 +408,6 @@ public partial class MainScript : TileMap
                 ShiftRows(row);
                 Score += REWARD;
                 Interval /= ACCELERATION;
-                Debug.WriteLine($"Speed is now {Interval}.");
                 RenderScore();
             }
             else
